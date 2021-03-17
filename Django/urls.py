@@ -20,5 +20,6 @@ from FilmRecommender import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('movies/', views.getRecommendations)
+    path('movies/', views.getRecommendations),
+    path('data/', views.massDataDump)
 ]
