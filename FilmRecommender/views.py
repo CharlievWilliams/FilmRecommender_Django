@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import simplejson
 
 import pandas as pd
 import requests
@@ -50,8 +51,11 @@ def massDataDump(request):
 
             # Append to array
             films.append(
-                (index, details_data['id'],
+                (index,
+                 details_data['id'],
                  details_data['title'],
+                 details_data['overview'],
+                 details_data['poster_path'],
                  genres,
                  production_companies,
                  spoken_languages,
@@ -59,11 +63,12 @@ def massDataDump(request):
                  cast))
             index = index + 1
         count = count + 1
-        if count == 500:
+        if count == 300:  # Total ID number
             break
     # Create CSV
     writer.writerow(
-        ('index', 'id', 'title', 'genres', 'production companies', 'spoken languages', 'keywords', 'credits'))
+        ('index', 'id', 'title', 'overview', 'poster path', 'genres', 'production companies', 'spoken languages',
+         'keywords', 'credits'))
     writer.writerows(films)
     f.close()
     # TODO: Return proper response
@@ -71,26 +76,69 @@ def massDataDump(request):
 
 
 def getRecommendations(request):
-    def get_id_from_index(index):
+
+    def find_id(index):
         return df[df.index == index]["id"].values[0]
+
+    def find_title(index):
+        return df[df.index == index]["title"].values[0]
+
+    def find_overview(index):
+        return df[df.index == index]["overview"].values[0]
+
+    def find_poster_path(index):
+        return df[df.index == index]["poster path"].values[0]
 
     def get_index_from_id(id):
         return df[df.id == int(id)]["index"].values[0]
 
-    query = request.GET.get('id', '')  # This is the ID of the film.
+    # This is the ID of the film.
+    film_id = request.GET.get('id', '')
+    # These are the parameters for recommendation
+    use_title = request.GET.get('title', 'false')
+    use_genres = request.GET.get('genres', 'false')
+    use_production_companies = request.GET.get('production_companies', 'false')
+    use_spoken_languages = request.GET.get('spoken_languages', 'false')
+    use_keywords = request.GET.get('keywords', 'false')
+    use_credits = request.GET.get('credits', 'false')
 
     df = pd.read_csv("full_dataset.csv")
 
     # Select Features
-    features = ['title', 'genres', 'production companies', 'spoken languages', 'keywords', 'credits']
+    features = []
+    if use_title == "true":
+        features.append('title')
+    if use_genres == "true":
+        features.append('genres')
+    if use_production_companies == "true":
+        features.append('production companies')
+    if use_spoken_languages == "true":
+        features.append('spoken languages')
+    if use_keywords == "true":
+        features.append('keywords')
+    if use_credits == "true":
+        features.append('credits')
 
     # Combine all Features
     for feature in features:
         df[feature] = df[feature].fillna('')
 
     def combine_features(row):
-        return row['title'] + " " + row['genres'] + " " + row['production companies'] + " " + row[
-            'spoken languages'] + " " + row['keywords'] + " " + row['credits']
+        combined_features = ""
+        if use_title == "true":
+            combined_features = combined_features + row['title'] + " "
+        if use_genres == "true":
+            combined_features = combined_features + row['genres'] + " "
+        if use_production_companies == "true":
+            combined_features = combined_features + row['production companies'] + " "
+        if use_spoken_languages == "true":
+            combined_features = combined_features + row['spoken languages'] + " "
+        if use_keywords == "true":
+            combined_features = combined_features + row['keywords'] + " "
+        if use_credits == "true":
+            combined_features = combined_features + row['credits'] + " "
+
+        return combined_features
 
     df["combined_features"] = df.apply(combine_features, axis=1)
 
@@ -101,22 +149,24 @@ def getRecommendations(request):
     # Compute Cosine Similarity
     cosine_sim = cosine_similarity(count_matrix)
 
-    # Get Index of Movie From Title
-    movie_index = get_index_from_id(query)
-    similar_movies = list(enumerate(cosine_sim[movie_index]))
-    sorted_similar_films = sorted(similar_movies, key=lambda x: x[1], reverse=True)
+    # Get Index of Film From Title
+    film_index = get_index_from_id(film_id)
+    similar_films = list(enumerate(cosine_sim[film_index]))
+    sorted_similar_films = sorted(similar_films, key=lambda x: x[1], reverse=True)
 
     # Get List of Similar Films
     count = 0
-    films = []
-    for movie in sorted_similar_films:
-        films.append(str(get_id_from_index(movie[0])))
+    data = []
+    for film in sorted_similar_films[1:]:
+        data.append({
+            "id": str(find_id(film[0])),
+            "title": find_title(film[0]),
+            "overview": find_overview(film[0]),
+            "poster_path": find_poster_path(film[0])
+        })
         count = count + 1
-        if count > 10:
+        if count > 20:
             break
 
-    data = {
-        'id': [films[0], films[1], films[2], films[3], films[4], films[5], films[6], films[7], films[8], films[9]]
-    }
-    dump = json.dumps(data)
+    dump = simplejson.dumps(data, ignore_nan=True)
     return HttpResponse(dump, content_type="application/json")
