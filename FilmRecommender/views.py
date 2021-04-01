@@ -63,7 +63,7 @@ def massDataDump(request):
                  cast))
             index = index + 1
         count = count + 1
-        if count == 300:  # Total ID number
+        if count == 3000:  # Total ID number
             break
     # Create CSV
     writer.writerow(
@@ -71,7 +71,6 @@ def massDataDump(request):
          'keywords', 'credits'))
     writer.writerows(films)
     f.close()
-    # TODO: Return proper response
     return HttpResponse("<html>Success</html>")
 
 
